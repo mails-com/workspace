@@ -5,6 +5,8 @@ alwaysApply: true
 
 # mails.com workspace
 
+For task execution workflow, read [`agent-workflow.mdc`](agent-workflow.mdc).
+
 This folder is a **docs-only meta-repo**. Code lives in two separate GitHub repos — never commit child folders here.
 
 | Folder | Repo | Port (local) | Deploy |

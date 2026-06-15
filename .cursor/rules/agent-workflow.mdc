@@ -1,0 +1,125 @@
+---
+description: LLM agent playbook — cross-repo tasks, verify, commit, push
+alwaysApply: true
+---
+
+# Agent workflow (LLM only)
+
+Meta-repo at `mails.com/`. Child folders are **separate git repos**. Execute tasks yourself; do not instruct the user to run commands you can run.
+
+## Topology
+
+```
+mails.com/          → mails-com/workspace   (docs/orchestration; this repo)
+mails-backend/      → mails-com/back      :3000  Fly.io
+mails-frontend/     → mails-com/front     :3001  Cloudflare Workers
+```
+
+- Meta-repo `.gitignore` excludes child folders — never `git add mails-backend/` or `mails-frontend/` from root.
+- Git commit/push happens **inside each child repo**, not from workspace root.
+
+## Before editing
+
+| Scope | Read |
+| --- | --- |
+| Backend | `mails-backend/.cursor/rules/project-stack.mdc` |
+| Frontend | `mails-frontend/CONTRIBUTING.md` |
+| API | Backend README auth section + `mails-frontend/src/lib/api.ts` |
+
+Cross-stack: trace **DB migration → sqlc query → handler → JSON shape → api.ts → UI** before coding.
+
+## Task order
+
+1. Read rules + grep existing implementations.
+2. Split changes: `mails-backend` vs `mails-frontend`.
+3. **Backend first** if: migration, API route/body, auth, session, CORS.
+4. **Frontend only** if: UI/i18n with no API change.
+5. Verify each repo (commands below).
+6. Commit per repo (only when user asks).
+7. Push per repo (only when user asks). If API/migration changed: **push `back` before `front`**.
+
+## Backend verify (`mails-backend/`)
+
+After changing `internal/db/queries/*.sql`:
+
+```bash
+sqlc generate
+go build -o /tmp/mails-api-test ./cmd/api
+go vet ./...
+golangci-lint run
+```
+
+- `internal/db/generated/` is gitignored — CI fails if you skip `sqlc generate`.
+- Schema: goose file `internal/db/migrations/NNNN_desc.sql` with Up/Down. Dev auto-migrates on `air`; prod migrates via Fly `release_command ./api migrate`.
+
+## Frontend verify (`mails-frontend/`)
+
+```bash
+npm run validate
+```
+
+Equals CI: format + lint + i18n + seo + typecheck + test + build.
+
+- Locales: always update `public/locales/en/` and `public/locales/es/` together.
+- Use static `t('key')` — no dynamic keys (i18n-check).
+- i18n + react-hook-form: Zod messages must refresh on language change — use `schemaRef` + re-`trigger()` (see `src/pages/settings-page.tsx`).
+
+## Local smoke (workspace root)
+
+```bash
+make dev    # Makefile uses overmind -N (required)
+make stop
+```
+
+- `make dev` without `-N` → Overmind sets `PORT=5000` on first process; overrides `.env` `PORT=3000`; conflicts with macOS AirPlay.
+- Health: `curl localhost:3000/ping`, `curl localhost:3000/health`
+- Login: `window.location` to `/auth/google` — not `fetch`. API calls: `credentials: "include"`.
+
+## Commits (one repo per commit)
+
+Only when user explicitly requests. Never `--no-verify` unless user says so.
+
+**Backend** (`cd mails-backend`):
+
+```bash
+git add <paths>
+git commit -m "feat(scope): description"
+```
+
+Lefthook: gofumpt, goimports, golangci-lint --fix, go mod tidy. commit-msg: `feat|fix|chore|docs|refactor|test|ci|perf`.
+
+**Frontend** (`cd mails-frontend`):
+
+```bash
+git add <paths>
+git commit -m "feat(scope): description"
+```
+
+Husky lint-staged + commitlint: `feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert`.
+
+Never commit `.env`, `.env.local`, or secrets.
+
+## Push
+
+```bash
+cd mails-backend && git push origin main
+cd mails-frontend && git push origin main
+```
+
+- `back` push → CI → Fly deploy + goose migrate.
+- `front` push → CI → Cloudflare build (`VITE_*` are build-time).
+
+## API quick reference
+
+- Errors: `{"error":"snake_code","message":"human"}`
+- User: `{id,email,name,avatar_url,locale,theme}` — flat, no `data` envelope
+- Partial update: `PATCH /api/me` with any of `name`, `locale`, `theme` (at least one field)
+- No `PATCH /api/me/locale` — removed; use unified `PATCH /api/me`
+
+## Do not
+
+- Commit child code from meta-repo git
+- Skip `sqlc generate` after SQL query edits
+- Push frontend before backend when migration/API changed
+- Create commits/pushes without user request
+- Edit `.cursor/plans/*.plan.md` when user says not to
