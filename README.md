@@ -44,7 +44,7 @@ brew install overmind
 After first-time setup below, start both apps from the workspace root:
 
 ```bash
-make dev                # backend :3000 + frontend :3001
+make dev                # backend :3000 + frontend :3001 (-N: don't let Overmind set PORT=5000)
 make stop               # stop both
 ```
 

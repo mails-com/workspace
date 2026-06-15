@@ -2,7 +2,7 @@
 
 dev:
 	@./scripts/check-workspace.sh
-	overmind start -f Procfile.dev
+	overmind start -f Procfile.dev -N
 
 stop:
 	overmind quit
