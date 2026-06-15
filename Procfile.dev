@@ -1,0 +1,2 @@
+backend: cd mails-backend && exec air
+frontend: cd mails-frontend && exec npm run dev

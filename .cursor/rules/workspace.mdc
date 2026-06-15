@@ -19,8 +19,12 @@ This folder is a **docs-only meta-repo**. Code lives in two separate GitHub repo
 
 ## Run locally
 
-1. Backend: `cd mails-backend && air` → `:3000` (needs Postgres + `.env`)
-2. Frontend: `cd mails-frontend && npm run dev` → `:3001` (needs `.env.local` with `VITE_API_URL=http://localhost:3000`)
+```bash
+make dev   # Overmind: backend :3000 + frontend :3001
+make stop  # stop both
+```
+
+Needs Overmind (`brew install overmind`), Postgres, and env files in each child repo. See README for first-time setup.
 
 Login = browser redirect to backend `/auth/google`. API = `fetch` with `credentials: "include"`.
 

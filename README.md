@@ -33,25 +33,62 @@ git clone git@github.com:mails-com/front.git mails-frontend
 
 **Prerequisites:** Go 1.26+, Node 20+, PostgreSQL, Google OAuth credentials.
 
-### Backend (terminal 1)
+### Quick start (one command)
+
+Install Overmind once (includes tmux on macOS):
 
 ```bash
+brew install overmind
+```
+
+After first-time setup below, start both apps from the workspace root:
+
+```bash
+make dev                # backend :3000 + frontend :3001
+make stop               # stop both
+```
+
+Useful Overmind commands:
+
+```bash
+make connect-backend    # attach to backend process in tmux
+make restart-backend    # restart backend without killing frontend
+make restart-frontend   # restart frontend without killing backend
+```
+
+### First-time setup (once per machine)
+
+```bash
+# Backend
 cd mails-backend
 createdb mails                    # once
 cp .env.example .env              # fill DATABASE_URL + Google OAuth
 lefthook install                  # git hooks
 sqlc generate                     # after clone or SQL query changes
+
+# Frontend
+cd ../mails-frontend
+npm install                       # husky hooks via prepare script
+cp .env.example .env.local        # VITE_API_URL=http://localhost:3000
+```
+
+Install backend dev tools once — see [`mails-backend/README.md`](mails-backend/README.md) (Air, sqlc, golangci-lint v2, Lefthook, goose).
+
+### Manual (two terminals)
+
+Use when debugging one process separately:
+
+**Backend (terminal 1):**
+
+```bash
+cd mails-backend
 air                               # → http://localhost:3000
 ```
 
-Install dev tools once — see [`mails-backend/README.md`](mails-backend/README.md) (Air, sqlc, golangci-lint v2, Lefthook, goose).
-
-### Frontend (terminal 2)
+**Frontend (terminal 2):**
 
 ```bash
 cd mails-frontend
-npm install                       # husky hooks via prepare script
-cp .env.example .env.local        # VITE_API_URL=http://localhost:3000
 npm run dev                       # → http://localhost:3001
 ```
 
