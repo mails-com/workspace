@@ -1,0 +1,30 @@
+---
+description: mails.com workspace — two independent repos, local ports, doc pointers
+alwaysApply: true
+---
+
+# mails.com workspace
+
+This folder is a **docs-only meta-repo**. Code lives in two separate GitHub repos — never commit child folders here.
+
+| Folder | Repo | Port (local) | Deploy |
+| --- | --- | --- | --- |
+| `mails-backend/` | `mails-com/back` | `:3000` | Fly.io `mails-back.fly.dev` |
+| `mails-frontend/` | `mails-com/front` | `:3001` | Cloudflare Workers `front.aitor.workers.dev` |
+
+## Read before editing
+
+- **Backend:** [`mails-backend/README.md`](mails-backend/README.md) + [`mails-backend/.cursor/rules/project-stack.mdc`](mails-backend/.cursor/rules/project-stack.mdc)
+- **Frontend:** [`mails-frontend/README.md`](mails-frontend/README.md) + [`mails-frontend/CONTRIBUTING.md`](mails-frontend/CONTRIBUTING.md)
+
+## Run locally
+
+1. Backend: `cd mails-backend && air` → `:3000` (needs Postgres + `.env`)
+2. Frontend: `cd mails-frontend && npm run dev` → `:3001` (needs `.env.local` with `VITE_API_URL=http://localhost:3000`)
+
+Login = browser redirect to backend `/auth/google`. API = `fetch` with `credentials: "include"`.
+
+## PR quality gates
+
+- Backend: Lefthook + CI (`sqlc generate` before build)
+- Frontend: `npm run validate`
