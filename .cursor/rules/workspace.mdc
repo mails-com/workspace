@@ -24,6 +24,7 @@ This folder is a **docs-only meta-repo**. Code lives in two separate GitHub repo
 ```bash
 make dev   # Overmind: backend :3000 + frontend :3001
 make stop  # stop both
+make sync-contracts  # after editing backend contracts/user.json — sync to frontend
 ```
 
 Needs Overmind (`brew install overmind`), Postgres, and env files in each child repo. See README for first-time setup.

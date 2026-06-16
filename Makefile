@@ -18,5 +18,6 @@ restart-frontend:
 connect-backend:
 	overmind connect backend
 
+# Copy API contract JSON from backend to frontend (run after editing mails-backend/contracts/)
 sync-contracts:
 	cp mails-backend/contracts/user.json mails-frontend/contracts/user.json

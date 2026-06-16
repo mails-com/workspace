@@ -26,7 +26,24 @@ mails-frontend/     → mails-com/front     :3001  Cloudflare Workers
 | Frontend | `mails-frontend/CONTRIBUTING.md` |
 | API | Backend README auth section + `mails-frontend/src/lib/api.ts` |
 
-Cross-stack: trace **DB migration → sqlc query → handler → JSON shape → api.ts → UI** before coding.
+Cross-stack: trace **DB migration → sqlc query → handler → `UserJSON` + `contracts/*.json` → `src/lib/schemas` + `api.ts` → UI** before coding.
+
+## API contracts (JSON shape sync)
+
+`back` and `front` are separate repos — contract files are **duplicated** (same bytes in each). CI tests keep backend `UserJSON` and frontend Zod in sync with `contracts/user.json`.
+
+**When you change the user API shape (`GET/PATCH /api/me`):**
+
+1. Update `UserJSON` + `newUserJSON` in `mails-backend/internal/handler/response.go`
+2. Update `mails-backend/contracts/user.json`
+3. From workspace root: `make sync-contracts` (copies user contract to frontend)
+4. Update `mails-frontend/src/lib/schemas/user.ts` (Zod `userSchema`)
+5. Commit **both child repos** (`back` first, then `front`)
+6. Verify: `go test ./...` + `golangci-lint run` in backend; `npm run validate` in frontend
+
+Runtime: `api.me()` / `api.updateMe()` parse responses with `userSchema.strict()` — extra or missing fields throw immediately in the browser.
+
+Future list resources (`Session`, `ConnectedAccount`): same pattern — add `contracts/{name}.json`, mapper tests, Zod schema, extend `api:validate`.
 
 ## Task order
 
@@ -44,6 +61,7 @@ After changing `internal/db/queries/*.sql`:
 
 ```bash
 sqlc generate
+go test ./...
 go build -o /tmp/mails-api-test ./cmd/api
 go vet ./...
 golangci-lint run
@@ -58,7 +76,7 @@ golangci-lint run
 npm run validate
 ```
 
-Equals CI: format + lint + i18n + seo + typecheck + test + build.
+Equals CI: format + lint + i18n + seo + **api contracts** + typecheck + test + build.
 
 - Locales: always update `public/locales/en/` and `public/locales/es/` together.
 - Use static `t('key')` — no dynamic keys (i18n-check).
@@ -67,8 +85,9 @@ Equals CI: format + lint + i18n + seo + typecheck + test + build.
 ## Local smoke (workspace root)
 
 ```bash
-make dev    # Makefile uses overmind -N (required)
-make stop
+make dev            # Overmind: backend :3000 + frontend :3001
+make stop           # stop both
+make sync-contracts # copy mails-backend/contracts/*.json → mails-frontend/contracts/
 ```
 
 - `make dev` without `-N` → Overmind sets `PORT=5000` on first process; overrides `.env` `PORT=3000`; conflicts with macOS AirPlay.
@@ -112,7 +131,7 @@ cd mails-frontend && git push origin main
 ## API quick reference
 
 - Errors: `{"error":"snake_code","message":"human"}`
-- User: `{id,email,name,avatar_url,locale,theme}` — flat, no `data` envelope
+- User: `{id,email,name,avatar_url,role,locale,theme}` — flat, no `data` envelope; canonical contract in `contracts/user.json` (both repos)
 - Partial update: `PATCH /api/me` with any of `name`, `locale`, `theme` (at least one field)
 - No `PATCH /api/me/locale` — removed; use unified `PATCH /api/me`
 
