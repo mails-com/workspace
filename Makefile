@@ -1,4 +1,4 @@
-.PHONY: dev stop restart-backend restart-frontend connect-backend
+.PHONY: dev stop restart-backend restart-frontend connect-backend sync-contracts
 
 dev:
 	@./scripts/check-workspace.sh
@@ -17,3 +17,6 @@ restart-frontend:
 
 connect-backend:
 	overmind connect backend
+
+sync-contracts:
+	cp mails-backend/contracts/user.json mails-frontend/contracts/user.json
