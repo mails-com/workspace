@@ -22,8 +22,9 @@ mails-frontend/     → mails-com/front     :3001  Cloudflare Workers
 
 | Scope | Read |
 | --- | --- |
-| Backend | `mails-backend/.cursor/rules/project-stack.mdc` |
-| Frontend | `mails-frontend/CONTRIBUTING.md` |
+| Both stacks | `.cursor/rules/stack.mdc` |
+| Backend detail | `mails-backend/.cursor/rules/project-stack.mdc` |
+| Frontend detail | `mails-frontend/CONTRIBUTING.md` |
 | API | Backend README auth section + `mails-frontend/src/lib/api.ts` |
 
 Cross-stack: trace **DB migration → sqlc query → handler → `UserJSON` + `contracts/*.json` → `src/lib/schemas` + `api.ts` → UI** before coding.

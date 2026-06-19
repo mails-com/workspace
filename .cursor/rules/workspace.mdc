@@ -16,6 +16,7 @@ This folder is a **docs-only meta-repo**. Code lives in two separate GitHub repo
 
 ## Read before editing
 
+- **Full stack:** [`stack.mdc`](stack.mdc) — backend + frontend technology and conventions
 - **Backend:** [`mails-backend/README.md`](mails-backend/README.md) + [`mails-backend/.cursor/rules/project-stack.mdc`](mails-backend/.cursor/rules/project-stack.mdc)
 - **Frontend:** [`mails-frontend/README.md`](mails-frontend/README.md) + [`mails-frontend/CONTRIBUTING.md`](mails-frontend/CONTRIBUTING.md)
 

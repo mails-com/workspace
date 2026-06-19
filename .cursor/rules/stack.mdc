@@ -1,0 +1,199 @@
+---
+description: Full-stack reference — backend (Go/Fiber) and frontend (React/CF Workers) technology and conventions
+alwaysApply: true
+---
+
+# mails.com — full stack
+
+Meta-repo orchestrates two **separate git repos**. Never commit `mails-backend/` or `mails-frontend/` from the workspace root.
+
+| Folder | GitHub repo | Local port | Production |
+| --- | --- | --- | --- |
+| `mails-backend/` | `mails-com/back` | `:3000` | Fly.io `mails-back.fly.dev` |
+| `mails-frontend/` | `mails-com/front` | `:3001` | Cloudflare Workers `front.aitor.workers.dev` |
+
+Deep dives: [`mails-backend/.cursor/rules/project-stack.mdc`](mails-backend/.cursor/rules/project-stack.mdc) (backend detail), [`mails-frontend/CONTRIBUTING.md`](mails-frontend/CONTRIBUTING.md) (frontend detail).
+
+---
+
+## Backend — Go + Fiber v3
+
+**Module:** `github.com/mails-com/back` · **Go 1.26** · **Fiber v3** (handlers use `fiber.Ctx`, not `*fiber.Ctx`)
+
+### Data layer
+
+| Piece | Role |
+| --- | --- |
+| Postgres | Fly Managed Postgres, driver `pgx/v5` + `pgxpool` (no ORM) |
+| goose | SQL migrations in `internal/db/migrations/` (`NNNN_desc.sql`) |
+| sqlc | `internal/db/queries/*.sql` → `internal/db/generated/` (gitignored) |
+
+**sqlc order:** always `sqlc generate` before `go build` / CI / Docker.
+
+**Tables (goose):** `users`, `oauth_accounts`, `user_sessions`, `user_events`, `user_credits`, `credit_transactions`, `api_keys`. `fiber_sessions` is auto-created by the session storage driver.
+
+### Package layout
+
+```
+cmd/api/main.go          entrypoint, routes, graceful shutdown, ./api migrate
+internal/handler/        HTTP handlers, middleware, NewErrorHandler
+internal/service/        credits, stripe, apikeys
+internal/auth/           Google OAuth2, CSRF state, userinfo
+internal/session/        Postgres-backed Fiber session (cookie session_id)
+internal/db/             pool, migrate, migrations, queries
+internal/ua/             user-agent → browser/OS/device_type
+contracts/user.json      canonical User JSON (synced to frontend)
+```
+
+### Middleware chain (global)
+
+1. CORS (`FRONTEND_URL` + `http://localhost:*`, credentials)
+2. recover → logger → session
+3. Route groups: `RequireAuth` (+ `TouchSession` on `/api`), `RequireAuthOrAPIKey` (+ limiter on `/v1`), `RequireAdmin` on `/admin`
+
+### API surface (summary)
+
+| Prefix | Auth | Notes |
+| --- | --- | --- |
+| `/ping`, `/health` | none | liveness / DB ping |
+| `/auth/*` | session flow | Google OAuth, logout → 303 to API `/` |
+| `/api/*` | session cookie | dashboard: me, sessions, credits, keys, billing portal |
+| `/v1/*` | cookie or API key | `POST /v1/validate` — 60 req/min sliding window per user |
+| `/admin/*` | session + admin role | gift credits (requires `ref_id`) |
+
+**Errors:** `{"error":"<snake_code>","message":"<human>"}` via `handler.NewErrorHandler()`.
+
+**User resource:** flat JSON `{id,email,name,avatar_url,role,locale,theme}` — contract in `contracts/user.json`.
+
+**Credits:** atomic ledger (`user_credits` + `credit_transactions`); idempotency via `X-Idempotency-Key` → `ref_id` (409 on duplicate).
+
+**API keys:** `mails_live_*` / `mails_test_*` + 64 hex; SHA-256 stored; Bearer or `X-API-Key` on `/v1`.
+
+### Auth
+
+- Login: browser redirect to `GET /auth/google` (not fetch)
+- API calls from SPA: `fetch(..., { credentials: "include" })`
+- Prod cookies: `SameSite=None; Secure` (cross-origin SPA ↔ API)
+- Session: `IdleTimeout 7d`, `AbsoluteTimeout 30d`
+
+### Env (server boot)
+
+Required: `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BASE_URL`, `FRONTEND_URL`, `STRIPE_SECRET_KEY`. Optional: `ENV`, `PORT`.
+
+Migrate subcommand: only `DATABASE_URL`.
+
+### Tooling & CI
+
+| Tool | Role |
+| --- | --- |
+| air | local dev hot reload |
+| Lefthook | pre-commit: gofumpt, goimports, golangci-lint v2 |
+| GitHub Actions | sqlc → tidy → build → vet → test → lint; deploy Fly on push to `main` |
+
+### Verify
+
+```bash
+cd mails-backend
+sqlc generate   # after SQL query edits
+go test ./...
+go vet ./...
+golangci-lint run
+go build -o /tmp/mails-api-test ./cmd/api
+```
+
+---
+
+## Frontend — React 19 + Cloudflare Workers
+
+**Node ≥ 20** · **TypeScript strict** · **Vite 8** · **React Router 7** (loaders)
+
+### UI & styling
+
+| Layer | Choice |
+| --- | --- |
+| Components | shadcn/ui Nova preset (Radix), `@/components/ui/*` |
+| Styling | Tailwind CSS v4 |
+| Icons | Lucide |
+| Font | Geist Variable |
+| Forms | react-hook-form + Zod |
+| Theme | next-themes (synced with `user.theme` via PATCH /api/me) |
+| Toasts | sonner |
+
+### Routing
+
+- Public: `/`, `/es` — `LocaleLayout`, `PageSeo`, indexable routes in `src/seo/pages.ts`
+- App: `/app/*` — `requireAuth` loader (user + credits), `AppLayout` outlet context
+- Settings: `/app/settings/*` — sessions, accounts, credits, api-keys
+- Login: `window.location` to `VITE_API_URL/auth/google`
+
+### API client (`src/lib/api.ts`)
+
+- Base: `import.meta.env.VITE_API_URL`
+- All calls: `credentials: "include"`
+- `api.me()` / `updateMe()` parse with `userSchema.strict()` (Zod)
+- Credits loader returns `null` on failure (not fake zero)
+- Validate: `POST /v1/validate` + `X-Idempotency-Key`
+
+### i18n
+
+- i18next + HTTP backend: `/locales/{{lng}}/{{ns}}.json`
+- Namespaces: `common`, `app`, `seo`
+- Languages: `en` (source), `es` — always update both
+- Static `t('key')` only (no dynamic keys — i18n-check)
+
+### Contracts
+
+Only `contracts/user.json` synced (`make sync-contracts` from workspace root). Other API shapes are TypeScript interfaces in `api.ts`.
+
+### Build & deploy
+
+| Piece | Role |
+| --- | --- |
+| `@cloudflare/vite-plugin` | Workers + client build |
+| `worker/index.ts` | asset serving, security headers, 404 routing |
+| wrangler | `npm run deploy` → `front` worker |
+| `prebuild` | sitemap generation |
+
+Build-time env: `VITE_API_URL`, `VITE_SITE_URL`, `VITE_SITE_NAME`, `VITE_OG_IMAGE`, etc.
+
+### Tooling & CI
+
+| Tool | Role |
+| --- | --- |
+| Husky + lint-staged | pre-commit format/lint on staged files |
+| commitlint | Conventional Commits |
+| GitHub Actions | `npm ci` + `npm run validate` |
+
+### Verify
+
+```bash
+cd mails-frontend
+npm run validate   # format, lint, i18n, seo, api contracts, typecheck, test, build
+```
+
+---
+
+## Cross-stack integration
+
+```mermaid
+flowchart LR
+  Browser --> CFWorker[Cloudflare Workers SPA]
+  Browser -->|credentials include| FlyAPI[Fly Go API]
+  FlyAPI --> Postgres[(Postgres)]
+  FlyAPI --> Stripe[Stripe API]
+  FlyAPI --> Google[Google OAuth]
+```
+
+| Concern | Pattern |
+| --- | --- |
+| User API shape change | migration → sqlc → handler `UserJSON` → `contracts/user.json` → `make sync-contracts` → Zod `userSchema` → `api.ts` |
+| Push order | `back` before `front` when API/migrations change |
+| Local dev | `make dev` (Overmind: backend :3000 + frontend :3001) |
+| Contract sync | `make sync-contracts` from workspace root |
+
+### Commit format
+
+- Backend: `feat|fix|chore|docs|refactor|test|ci|perf` (Lefthook)
+- Frontend: `feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert` (Husky)
+
+Commit and push **inside each child repo**, not from meta-repo (except docs in workspace root).

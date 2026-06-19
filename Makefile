@@ -2,12 +2,11 @@
 
 dev:
 	@./scripts/check-workspace.sh
-	@./scripts/clean-overmind-socket.sh
+	@./scripts/prepare-dev.sh
 	overmind start -f Procfile.dev -N
 
 stop:
-	-overmind quit
-	@./scripts/clean-overmind-socket.sh
+	@./scripts/prepare-dev.sh
 
 restart-backend:
 	overmind restart backend
